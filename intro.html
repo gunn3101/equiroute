@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EquiRoute — Team Spectre</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --text:        #2a2520;
+      --sub:         #7a746a;
+      --accent:      #7c6f5a;
+      --accent-dark: #5c5244;
+      --glass-bg:    rgba(235, 228, 214, 0.45);
+      --glass-border:rgba(200, 192, 175, 0.55);
+      --green:       #2e7d4f;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      color: var(--text);
+      position: relative;
+      height: 100vh;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      filter: saturate(0.7) brightness(1.05);
+    }
+
+    #vignette {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: radial-gradient(ellipse at center,
+        rgba(235,228,214,0.15) 0%,
+        rgba(210,198,178,0.55) 60%,
+        rgba(180,165,140,0.75) 100%
+      );
+      pointer-events: none;
+    }
+
+    /* ── CENTER ── */
+    #center {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .team-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 7px 18px 7px 10px;
+      margin-bottom: 28px;
+      box-shadow: 0 4px 20px rgba(60,50,30,0.12), inset 0 1px 0 rgba(255,255,255,0.55);
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.3s forwards;
+    }
+
+    .team-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(46,125,79,0.7);
+      animation: blink 2.5s infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity:1; box-shadow: 0 0 6px rgba(46,125,79,0.7); }
+      50%      { opacity:0.6; box-shadow: 0 0 12px rgba(46,125,79,0.3); }
+    }
+
+    .team-label {
+      font-size: 11px; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--sub);
+    }
+    .team-sep { width: 1px; height: 12px; background: var(--glass-border); }
+    .team-name {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent-dark);
+    }
+
+    /* ── TITLE ── */
+    .title-wrap {
+      text-align: center;
+      opacity: 0;
+      animation: fadeUp 0.8s ease 0.55s forwards;
+    }
+
+    .title-main {
+      font-size: clamp(56px, 9vw, 110px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: var(--text);
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      text-decoration: none;
+    }
+    .title-main:hover { opacity: 0.75; }
+
+    .title-main::before {
+      content: '';
+      position: absolute;
+      inset: -16px -28px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(28px) saturate(160%);
+      -webkit-backdrop-filter: blur(28px) saturate(160%);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow: 0 12px 48px rgba(60,50,30,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+      z-index: -1;
+    }
+
+    .title-sub {
+      margin-top: 16px;
+      font-size: clamp(13px, 1.5vw, 16px);
+      font-weight: 300;
+      color: var(--sub);
+      letter-spacing: 0.06em;
+    }
+
+    /* ── TAGLINE ── */
+    .tagline {
+      margin-top: 36px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 0.85s forwards;
+    }
+    .tag-line { width: 40px; height: 1px; background: linear-gradient(90deg, transparent, var(--accent)); }
+    .tag-line.r { background: linear-gradient(90deg, var(--accent), transparent); }
+    .tagline-text {
+      font-size: 12px; font-weight: 400;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--sub);
+    }
+
+    /* ── BOTTOM BAR ── */
+    #bottom-bar {
+      position: absolute;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      opacity: 0;
+      animation: fadeUp 0.7s ease 1.1s forwards;
+    }
+
+    .b-chip {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 20px;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(60,50,30,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+      white-space: nowrap;
+    }
+    .b-chip-n {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px; font-weight: 500;
+      color: var(--text); display: block;
+    }
+    .b-chip-l {
+      font-size: 10px; font-weight: 400;
+      color: var(--sub); text-transform: uppercase;
+      letter-spacing: 0.08em; margin-top: 2px; display: block;
+    }
+
+    /* ── CORNER LOGO ── */
+    #corner {
+      position: absolute;
+      top: 24px; left: 24px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 16px rgba(60,50,30,0.1), inset 0 1px 0 rgba(255,255,255,0.5);
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.1s forwards;
+      text-decoration: none;
+    }
+    .corner-icon {
+      width: 26px; height: 26px;
+      background: linear-gradient(135deg, #7c6f5a, #a0906e);
+      border-radius: 7px;
+      display: grid; place-items: center;
+      box-shadow: 0 2px 8px rgba(80,60,30,0.35);
+      flex-shrink: 0;
+    }
+    .corner-text { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+
+    /* ── TOP RIGHT CLUSTER ── */
+    #top-right {
+      position: absolute;
+      top: 24px; right: 24px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      animation: fadeUp 0.6s ease 0.1s forwards;
+    }
+
+    /* ── FEEDBACK BTN ── */
+    #feedback-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-family: 'Sora', sans-serif;
+      font-size: 12px; font-weight: 500;
+      color: var(--accent-dark);
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(60,50,30,0.1), inset 0 1px 0 rgba(255,255,255,0.5);
+      transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+      letter-spacing: 0.02em;
+    }
+    #feedback-btn:hover {
+      background: rgba(235,228,214,0.72);
+      box-shadow: 0 6px 22px rgba(60,50,30,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+      transform: translateY(-1px);
+    }
+    #feedback-btn:active { transform: translateY(0); }
+
+    /* ── YEAR CHIP ── */
+    #year-chip {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(150%);
+      -webkit-backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; font-weight: 500;
+      color: var(--sub);
+      box-shadow: 0 4px 16px rgba(60,50,30,0.1), inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(235,228,214,0.5) !important;
+      backdrop-filter: blur(8px) !important;
+      color: var(--sub) !important;
+      font-size: 10px !important;
+    }
+    .leaflet-control-attribution a { color: var(--accent) !important; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="vignette"></div>
+
+<!-- Corner logo -->
+<a id="corner" href="index.html">
+  <div class="corner-icon">
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <circle cx="7.5" cy="7.5" r="5.5" stroke="#f8f4ec" stroke-width="1.5"/>
+      <path d="M7.5 4.5v3l2.2 1.6" stroke="#f8f4ec" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <span class="corner-text">EquiRoute</span>
+</a>
+
+<!-- Top right: Feedback + Year -->
+<div id="top-right">
+  <a id="feedback-btn" href="feedback.html">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <path d="M14 1H2C1.45 1 1 1.45 1 2v9c0 .55.45 1 1 1h2v2.5l3-2.5h7c.55 0 1-.45 1-1V2c0-.55-.45-1-1-1z"
+        stroke="#5c5244" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M4.5 6.5h7M4.5 9h4.5" stroke="#5c5244" stroke-width="1.3" stroke-linecap="round"/>
+    </svg>
+    Feedback
+  </a>
+  <div id="year-chip">2025</div>
+</div>
+
+<!-- Center content -->
+<div id="center">
+  <div class="team-pill">
+    <div class="team-dot"></div>
+    <span class="team-label">Presenting</span>
+    <div class="team-sep"></div>
+    <span class="team-name">Team Spectre</span>
+  </div>
+
+  <div class="title-wrap">
+    <a href="index.html" class="title-main">EquiRoute</a>
+    <div class="title-sub">Resource Equity · Spatial Intelligence · Urban Planning</div>
+  </div>
+
+  <div class="tagline">
+    <div class="tag-line"></div>
+    <span class="tagline-text">Mapping access. Closing gaps.</span>
+    <div class="tag-line r"></div>
+  </div>
+</div>
+
+<!-- Bottom stats — decorative only -->
+<div id="bottom-bar">
+  <div class="b-chip">
+    <span class="b-chip-n">H3</span>
+    <span class="b-chip-l">Hex Grid</span>
+  </div>
+  <div class="b-chip">
+    <span class="b-chip-n">OSM</span>
+    <span class="b-chip-l">Open Data</span>
+  </div>
+  <div class="b-chip">
+    <span class="b-chip-n">3</span>
+    <span class="b-chip-l">Resource Types</span>
+  </div>
+  <div class="b-chip">
+    <span class="b-chip-n">∞</span>
+    <span class="b-chip-l">Cities</span>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map', {
+    zoomControl: false, attributionControl: true,
+    dragging: false, scrollWheelZoom: false,
+    doubleClickZoom: false, keyboard: false
+  }).setView([19.076, 72.8777], 12);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://carto.com">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>',
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(map);
+
+  let angle = 0;
+  function ambientPan() {
+    angle += 0.0004;
+    map.setView([
+      19.076  + Math.sin(angle) * 0.015,
+      72.8777 + Math.cos(angle * 0.7) * 0.02
+    ], 12, { animate: true, duration: 2 });
+    setTimeout(ambientPan, 2000);
+  }
+  setTimeout(ambientPan, 1800);
+</script>
+</body>
+</html>

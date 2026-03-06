@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EquiRoute — Resource Equity Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --glass-bg:     rgba(210, 205, 195, 0.18);
+      --glass-border: rgba(210, 205, 195, 0.28);
+      --glass-hover:  rgba(210, 205, 195, 0.26);
+      --text:         #2a2520;
+      --text-inv:     #f0ede8;
+      --sub:          #7a746a;
+      --accent:       #7c6f5a;
+      --accent-dark:  #5c5244;
+      --accent-glow:  rgba(124,111,90,0.25);
+      --red:          #c0392b;
+      --orange:       #c96a1a;
+      --yellow:       #a07c10;
+      --green:        #2e7d4f;
+      --radius:       12px;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      border: 6px solid rgba(124, 111, 90, 0.55);
+      border-radius: 0px;
+      pointer-events: none;
+      z-index: 9999;
+      box-shadow: inset 0 0 40px rgba(60,50,30,0.08);
+    }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      position: relative;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      background: #ddd5c0;
+    }
+
+    #overlay {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      width: 100%;
+      height: 100%;
+      padding: 20px;
+      pointer-events: none;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: 276px;
+      flex-shrink: 0;
+      background: rgba(235, 228, 214, 0.45);
+      backdrop-filter: blur(28px) saturate(160%);
+      -webkit-backdrop-filter: blur(28px) saturate(160%);
+      border: 1px solid rgba(200, 192, 175, 0.55);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      pointer-events: all;
+      box-shadow:
+        0 8px 32px rgba(60,50,30,0.18),
+        inset 0 1px 0 rgba(255,255,255,0.55),
+        inset 0 -1px 0 rgba(0,0,0,0.04);
+    }
+
+    .sb-top {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid rgba(180,170,150,0.35);
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .logo-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #7c6f5a, #a0906e);
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 2px 8px rgba(80,60,30,0.35);
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      font-weight: 300;
+      color: var(--sub);
+      margin-top: 4px;
+      letter-spacing: 0.02em;
+    }
+
+    .sb-form {
+      flex: 1;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    .field label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--sub);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      padding: 9px 12px;
+      font-family: 'Sora', sans-serif;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text);
+      background: rgba(255,250,240,0.55);
+      border: 1px solid rgba(180,168,148,0.5);
+      border-radius: 9px;
+      outline: none;
+      appearance: none;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .field input::placeholder { color: rgba(122,116,106,0.55); }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: var(--accent);
+      background: rgba(255,252,244,0.8);
+      box-shadow: 0 0 0 3px var(--accent-glow), inset 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .field select option { background: #e8dfc8; color: var(--text); }
+
+    .sel-wrap { position: relative; }
+    .sel-wrap::after {
+      content: '';
+      position: absolute;
+      right: 12px; top: 50%;
+      transform: translateY(-50%);
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid var(--sub);
+      pointer-events: none;
+    }
+
+    .run-btn {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, #7c6f5a, #9c8a6e);
+      color: #f8f4ec;
+      border: none;
+      border-radius: 9px;
+      font-family: 'Sora', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      box-shadow: 0 3px 12px rgba(80,60,30,0.3), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+    .run-btn:hover { opacity: 0.88; box-shadow: 0 5px 18px rgba(80,60,30,0.4); }
+    .run-btn:active { transform: scale(0.98); }
+    .run-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    hr.div { border: none; border-top: 1px solid rgba(180,168,148,0.35); }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .stat {
+      background: rgba(255,250,240,0.4);
+      border: 1px solid rgba(180,168,148,0.4);
+      border-radius: 9px;
+      padding: 10px 12px;
+      transition: background 0.2s;
+    }
+    .stat:hover { background: rgba(255,250,240,0.6); }
+
+    .stat-n {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .stat-l {
+      font-size: 10px;
+      color: var(--sub);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #status {
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--sub);
+      line-height: 1.6;
+      padding: 10px 12px;
+      background: rgba(255,250,240,0.4);
+      border-radius: 9px;
+      border: 1px solid rgba(180,168,148,0.4);
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      min-height: 40px;
+    }
+    #status.ok  { border-color: rgba(46,125,79,0.4);  color: #2e7d4f; background: rgba(46,125,79,0.07); }
+    #status.err { border-color: rgba(192,57,43,0.4);  color: #c0392b; background: rgba(192,57,43,0.07); }
+    #status.run { border-color: rgba(124,111,90,0.5); color: #7c6f5a; background: rgba(124,111,90,0.08); }
+
+    .leg-title {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--sub);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 9px;
+    }
+    .leg-list { display: flex; flex-direction: column; gap: 6px; }
+    .leg-row { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--sub); }
+    .leg-pip { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* ── FOOTER ── */
+    .sb-foot {
+      padding: 12px 18px;
+      border-top: 1px solid rgba(180,168,148,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .foot-t { font-size: 11px; color: var(--sub); flex-shrink: 0; }
+
+    /* ── FEEDBACK BUTTON ── */
+    .feedback-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      background: rgba(255,250,240,0.5);
+      border: 1px solid rgba(180,168,148,0.5);
+      border-radius: 7px;
+      font-family: 'Sora', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent-dark);
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+      white-space: nowrap;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+    .feedback-btn:hover {
+      background: rgba(255,250,240,0.85);
+      box-shadow: 0 2px 8px rgba(60,50,30,0.12), inset 0 1px 0 rgba(255,255,255,0.6);
+      transform: translateY(-1px);
+    }
+    .feedback-btn:active { transform: translateY(0); }
+
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: rgba(122,116,106,0.3);
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+    .live-dot.on {
+      background: var(--green);
+      box-shadow: 0 0 6px rgba(46,125,79,0.6);
+      animation: pulse 2.5s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 6px rgba(46,125,79,0.6); }
+      50%      { box-shadow: 0 0 12px rgba(46,125,79,0.2); }
+    }
+
+    /* ── CITY CHIP ── */
+    .chip {
+      position: absolute;
+      top: 20px; right: 20px;
+      z-index: 10;
+      background: rgba(235,228,214,0.45);
+      backdrop-filter: blur(20px) saturate(150%);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      border: 1px solid rgba(200,192,175,0.5);
+      border-radius: 12px;
+      padding: 11px 15px;
+      font-size: 12px;
+      color: var(--sub);
+      line-height: 1.5;
+      pointer-events: none;
+      box-shadow: 0 4px 16px rgba(60,50,30,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+    }
+    .chip strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 1px;
+    }
+
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(180,168,148,0.4); border-radius: 3px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(248,244,236,0.3);
+      border-top-color: #f8f4ec;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .leaflet-popup-content-wrapper {
+      background: rgba(235,228,214,0.72) !important;
+      backdrop-filter: blur(20px) saturate(150%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+      border: 1px solid rgba(200,192,175,0.55) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 28px rgba(60,50,30,0.2), inset 0 1px 0 rgba(255,255,255,0.55) !important;
+    }
+    .leaflet-popup-tip-container { display: none; }
+    .leaflet-popup-content {
+      font-family: 'Sora', sans-serif !important;
+      color: var(--text) !important;
+      margin: 14px 16px !important;
+      font-size: 13px !important;
+    }
+    .leaflet-control-zoom a {
+      background: rgba(235,228,214,0.6) !important;
+      backdrop-filter: blur(12px) !important;
+      color: var(--text) !important;
+      border-color: rgba(200,192,175,0.5) !important;
+      font-weight: 500 !important;
+    }
+    .leaflet-control-zoom a:hover { background: rgba(235,228,214,0.85) !important; }
+    .leaflet-control-attribution {
+      background: rgba(235,228,214,0.55) !important;
+      backdrop-filter: blur(8px) !important;
+      color: var(--sub) !important;
+      font-size: 10px !important;
+      border-radius: 6px 0 0 0 !important;
+    }
+    .leaflet-control-attribution a { color: var(--accent) !important; }
+
+    .pop-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 30px; font-weight: 500;
+      color: var(--text); line-height: 1; margin-bottom: 12px;
+    }
+    .pop-score small { font-size: 14px; color: var(--sub); font-weight: 400; }
+    .pop-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(180,168,148,0.35);
+      font-size: 12px; color: var(--sub);
+    }
+    .pop-row:last-child { border-bottom: none; }
+    .pop-row b { color: var(--text); font-weight: 500; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 500; }
+    .tag-c { background: rgba(192,57,43,0.1);  color: var(--red);    border: 1px solid rgba(192,57,43,0.25); }
+    .tag-m { background: rgba(201,106,26,0.1); color: var(--orange); border: 1px solid rgba(201,106,26,0.25); }
+    .tag-l { background: rgba(160,124,16,0.1); color: var(--yellow); border: 1px solid rgba(160,124,16,0.25); }
+    .tag-s { background: rgba(46,125,79,0.1);  color: var(--green);  border: 1px solid rgba(46,125,79,0.25); }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="overlay">
+  <div id="sidebar">
+    <div class="sb-top">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="5.5" stroke="#f8f4ec" stroke-width="1.5"/>
+            <path d="M7.5 4.5v3l2.2 1.6" stroke="#f8f4ec" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        EquiRoute
+      </div>
+      <div class="logo-sub">Resource Equity Analysis</div>
+    </div>
+
+    <div class="sb-form">
+      <div class="field">
+        <label>City</label>
+        <input id="cityInput" type="text" placeholder="Mumbai, India" value="Mumbai, India" />
+      </div>
+      <div class="field">
+        <label>Resource Type</label>
+        <div class="sel-wrap">
+          <select id="resourceSelect">
+            <option value="medical">Medical Facilities</option>
+            <option value="education">Educational Hubs</option>
+            <option value="evacuation">Evacuation Centers</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="run-btn" id="runBtn" onclick="runAnalysis()">
+        <span id="btnContent">Analyze</span>
+      </button>
+
+      <hr class="div" />
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-n" id="numF">—</div>
+          <div class="stat-l">Facilities</div>
+        </div>
+        <div class="stat">
+          <div class="stat-n" id="numZ">—</div>
+          <div class="stat-l">Risk Zones</div>
+        </div>
+      </div>
+
+      <div id="status">Ready. Enter a city and run analysis.</div>
+
+      <div>
+        <div class="leg-title">Priority Level</div>
+        <div class="leg-list">
+          <div class="leg-row"><div class="leg-pip" style="background:#c0392b"></div>Critical &nbsp;( &gt; 0.6 )</div>
+          <div class="leg-row"><div class="leg-pip" style="background:#c96a1a"></div>Moderate ( 0.4 – 0.6 )</div>
+          <div class="leg-row"><div class="leg-pip" style="background:#a07c10"></div>Low &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;( 0.2 – 0.4 )</div>
+          <div class="leg-row"><div class="leg-pip" style="background:#2e7d4f"></div>Served &nbsp;&nbsp;( &lt; 0.2 )</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER with Feedback button -->
+    <div class="sb-foot">
+      <span class="foot-t">OSM · Demo</span>
+      <a class="feedback-btn" href="feedback.html">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M14 1H2C1.45 1 1 1.45 1 2v9c0 .55.45 1 1 1h2v2.5l3-2.5h7c.55 0 1-.45 1-1V2c0-.55-.45-1-1-1z"
+            stroke="#5c5244" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M4.5 6.5h7M4.5 9h4.5" stroke="#5c5244" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        Feedback
+      </a>
+      <div class="live-dot" id="liveDot"></div>
+    </div>
+  </div>
+</div>
+
+<div class="chip">
+  <strong id="chipCity">Mumbai, India</strong>
+  Click a zone to inspect
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map('map', { zoomControl: false })
+               .setView([19.076, 72.8777], 12);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://carto.com">CARTO</a> © <a href="https://openstreetmap.org">OSM</a>',
+    subdomains: 'abcd', maxZoom: 20
+  }).addTo(map);
+
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  let hexLayer = L.layerGroup().addTo(map);
+
+  const getColor = s => s > .6 ? '#c0392b' : s > .4 ? '#c96a1a' : s > .2 ? '#a07c10' : '#2e7d4f';
+  const getTag   = s => s > .6 ? '<span class="tag tag-c">Critical</span>'
+                      : s > .4 ? '<span class="tag tag-m">Moderate</span>'
+                      : s > .2 ? '<span class="tag tag-l">Low</span>'
+                      :          '<span class="tag tag-s">Served</span>';
+
+  function hexPoly(lat, lng, r) {
+    // Flat-top hexagon — correct uniform shape
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i;
+      pts.push([lat + r * Math.cos(a), lng + r * Math.sin(a)]);
+    }
+    return pts;
+  }
+
+  // ── API CONFIG (relative URL — served by FastAPI on same origin) ──────────
+  const API_BASE = '';
+
+  function renderZones(zones) {
+    zones.forEach(z => {
+      const c = getColor(z.priority_score);
+      const poly = L.polygon(hexPoly(z.lat, z.lon, 0.012), {
+        color: c, weight: 1, fillColor: c, fillOpacity: 0.38
+      }).addTo(hexLayer);
+      poly.bindPopup(`
+        <div class="pop-score">${Math.round(z.priority_score * 100)}<small> / 100</small></div>
+        <div class="pop-row"><span>Priority score</span><b>${z.priority_score}</b></div>
+        <div class="pop-row"><span>Facilities nearby</span><b>${z.access_count}</b></div>
+        <div class="pop-row"><span>Risk level</span><b>${getTag(z.priority_score)}</b></div>
+      `);
+      poly.on('mouseover', () => poly.setStyle({ fillOpacity: .62, weight: 2 }));
+      poly.on('mouseout',  () => poly.setStyle({ fillOpacity: .38, weight: 1 }));
+    });
+  }
+
+  // ── MAIN ANALYSIS FUNCTION ───────────────────────────────────────────────
+  async function runAnalysis() {
+    const city     = document.getElementById('cityInput').value.trim();
+    const resource = document.getElementById('resourceSelect').value;
+    if (!city) return;
+
+    const btn  = document.getElementById('runBtn');
+    const btnC = document.getElementById('btnContent');
+    btn.disabled = true;
+    btnC.innerHTML = '<span class="spin"></span> Analyzing…';
+    setStatus('Fetching live data from OpenStreetMap…', 'run');
+    document.getElementById('liveDot').classList.remove('on');
+    hexLayer.clearLayers();
+    document.getElementById('numF').textContent = '—';
+    document.getElementById('numZ').textContent = '—';
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/analyze?city=${encodeURIComponent(city)}&resource=${encodeURIComponent(resource)}`
+      );
+
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const zones = data.high_risk_zones || [];
+      if (zones.length === 0) throw new Error('No zones returned — check terminal for engine logs.');
+
+      document.getElementById('numF').textContent = data.total_found ?? '—';
+      document.getElementById('numZ').textContent = zones.length;
+      document.getElementById('chipCity').textContent = data.city || city;
+
+      // Pan to centroid of actual returned data
+      const avgLat = zones.reduce((s, z) => s + z.lat, 0) / zones.length;
+      const avgLon = zones.reduce((s, z) => s + z.lon,  0) / zones.length;
+      map.setView([avgLat, avgLon], 11, { animate: true });
+
+      renderZones(zones);
+
+      setStatus(`Analysis complete — ${zones.length} zones mapped.`, 'ok');
+      document.getElementById('liveDot').classList.add('on');
+
+    } catch (err) {
+      console.error(err);
+      setStatus(`Error: ${err.message}`, 'err');
+      document.getElementById('liveDot').classList.remove('on');
+    } finally {
+      btn.disabled = false;
+      btnC.textContent = 'Analyze';
+    }
+  }
+
+  function setStatus(msg, cls) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = cls || '';
+  }
+
+  document.getElementById('cityInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runAnalysis();
+  });
+
+</script>
+</body>
+</html>
