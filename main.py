@@ -162,7 +162,98 @@ def clip_to_boundary(rows, boundary):
     return out
 
 
-def score_hexes(rows, boundary, resolution=7):
+
+# ── RECOMMENDATIONS ENGINE ────────────────────────────────────────────────────
+_RECS = {
+    "medical": {
+        "critical": [
+            "Urgently establish a primary health centre or mobile clinic in this zone",
+            "Deploy an emergency medical response unit for rapid incident coverage",
+            "Negotiate ambulance pre-positioning with the nearest hospital",
+            "Launch a community health-worker programme for door-to-door triage",
+            "Apply for PM-JAY / Ayushman Bharat facility-expansion grant",
+        ],
+        "moderate": [
+            "Extend clinic operating hours to evenings and weekends",
+            "Set up a telemedicine kiosk to broaden specialist reach",
+            "Partner with pharmacies to run basic diagnostic screening camps",
+            "Strengthen the referral pathway to the nearest secondary-care hospital",
+            "Train 5–10 local volunteers in first-aid and emergency response",
+        ],
+        "low": [
+            "Run quarterly health-awareness camps (diabetes, BP, maternal health)",
+            "Publish a public directory of nearby facilities with contact details",
+            "Encourage registration under the National Health Mission for subsidised care",
+        ],
+        "served": [
+            "Coverage is adequate — schedule an annual facility audit",
+            "Explore preventive-care programmes to reduce future demand",
+        ],
+    },
+    "education": {
+        "critical": [
+            "Prioritise construction of a government primary school in this zone",
+            "Launch bridge-course centres to re-enrol out-of-school children",
+            "Deploy mobile school vans for hard-to-reach sub-zones",
+            "Partner with NGOs (Pratham, Teach For India) for interim coverage",
+            "Apply for Samagra Shiksha Abhiyan infrastructure funding",
+        ],
+        "moderate": [
+            "Add classrooms or a second shift to reduce severe overcrowding",
+            "Establish a community learning centre for after-school tutoring",
+            "Expand the mid-day meal programme to improve enrolment & retention",
+            "Distribute digital tablets / e-learning kits to supplement teaching",
+            "Run regular teacher-training workshops to lift learning outcomes",
+        ],
+        "low": [
+            "Organise skill-development workshops for school dropouts",
+            "Set up a public library or reading room in the neighbourhood",
+            "Monitor attendance and enrolment trends for early intervention",
+        ],
+        "served": [
+            "Coverage is adequate — focus on quality-improvement metrics",
+            "Introduce STEM enrichment programmes and extracurricular activities",
+        ],
+    },
+    "evacuation": {
+        "critical": [
+            "Immediately designate and equip an emergency evacuation shelter",
+            "Map all multi-storey buildings suitable as vertical evacuation points",
+            "Install an emergency broadcast / siren system for rapid alerts",
+            "Conduct a mandatory evacuation drill within the next 30 days",
+            "Pre-position 72-hour emergency supplies: water, food, first-aid kits",
+        ],
+        "moderate": [
+            "Establish a secondary evacuation route and signpost it clearly",
+            "Train community wardens in evacuation coordination procedures",
+            "Update the local disaster-management plan to include this zone",
+            "Ensure shelter capacity for at least 500 displaced persons",
+            "Coordinate with civil-defence volunteers for regular mock drills",
+        ],
+        "low": [
+            "Verify existing shelters meet current structural-safety standards",
+            "Distribute household emergency-preparedness guides to residents",
+            "Maintain an updated register of vulnerable residents (elderly, disabled)",
+        ],
+        "served": [
+            "Evacuation infrastructure is adequate — run an annual readiness audit",
+            "Improve accessibility at shelters for persons with disabilities",
+        ],
+    },
+}
+
+def get_recommendations(resource: str, score: float, access: int) -> dict:
+    pool = _RECS.get(resource, _RECS["medical"])
+    if   score > 0.6: tier, items = "critical", pool["critical"]
+    elif score > 0.4: tier, items = "moderate", pool["moderate"]
+    elif score > 0.2: tier, items = "low",      pool["low"]
+    else:             tier, items = "served",   pool["served"]
+    # Pick 2 items deterministically (same zone always gets same recs)
+    idx   = access % max(1, len(items))
+    picks = [items[idx], items[(idx + 1) % len(items)]]
+    return {"tier": tier, "items": picks}
+
+def score_hexes(rows, boundary, resolution=7, resource='medical'):
     polys = [boundary] if isinstance(boundary, Polygon) else list(boundary.geoms)
     all_hexes = set()
     for poly in polys:
@@ -183,8 +274,10 @@ def score_hexes(rows, boundary, resolution=7):
         vuln   = round(0.5 + np.random.random()*0.5, 4)
         score  = round(vuln / (access + 1), 4)
         lat, lon = h3.cell_to_latlng(hx)
+        recs = get_recommendations(resource, score, access)
         results.append({"h3_index": hx, "lat": round(lat,6), "lon": round(lon,6),
-                         "priority_score": score, "access_count": access})
+                         "priority_score": score, "access_count": access,
+                         "rec_tier": recs["tier"], "rec_items": recs["items"]})
     return results
 
 
@@ -345,7 +438,7 @@ async def analyze(city: str, resource: str):
     if not rows:
         return {"error": "Facility fetch failed — Overpass may be rate-limiting. Wait 30s and retry."}
     rows = clip_to_boundary(rows, boundary)
-    zones = score_hexes(rows, boundary)
+    zones = score_hexes(rows, boundary, resource=resource)
     return {"city": city, "resource": resource, "total_found": len(rows), "high_risk_zones": zones}
 
 
@@ -378,7 +471,7 @@ async def clusters(city: str, resource: str = "medical"):
         return {"error": f"Facility fetch failed for {resource}. Overpass may be rate-limiting — wait 30s and retry."}
 
     rows  = clip_to_boundary(rows, boundary)
-    zones = score_hexes(rows, boundary)
+    zones = score_hexes(rows, boundary, resource=resource)
     print(f"[clusters] {resource}: {len(rows)} facilities, {len(zones)} zones")
 
     try:
@@ -399,7 +492,7 @@ async def debug(city: str = "Mumbai, India", resource: str = "medical"):
     w, s, e, n = boundary.bounds
     rows = await fetch_facilities((s, w, n, e), resource)
     rows = clip_to_boundary(rows, boundary)
-    zones = score_hexes(rows, boundary)
+    zones = score_hexes(rows, boundary, resource=resource)
     return {"boundary_type": boundary.geom_type, "total_facilities": len(rows),
             "total_zones": len(zones), "sample": rows[:3]}
 

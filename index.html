@@ -131,6 +131,20 @@
     .tag-l{background:rgba(160,124,16,0.1);color:var(--yellow);border:1px solid rgba(160,124,16,0.25)}
     .tag-s{background:rgba(46,125,79,0.1);color:var(--green);border:1px solid rgba(46,125,79,0.25)}
     ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(180,168,148,0.4);border-radius:3px}
+    /* RECOMMENDATIONS PANEL */
+    #recPanel{display:none;flex-direction:column;gap:0;padding:0 14px 14px}
+    .rec-header{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;padding:9px 12px;border-radius:9px 9px 0 0;margin-bottom:0}
+    .rec-item{font-size:11.5px;line-height:1.55;padding:7px 12px;border-left:3px solid transparent;background:rgba(255,252,246,0.5)}
+    .rec-item:last-child{border-radius:0 0 9px 9px}
+    .rec-item::before{content:"→ ";font-weight:600;opacity:0.7}
+    .rec-critical .rec-header{background:rgba(192,57,43,0.1);color:#c0392b;border:1px solid rgba(192,57,43,0.2)}
+    .rec-critical .rec-item{border-left-color:#c0392b;border-right:1px solid rgba(192,57,43,0.15);border-bottom:1px solid rgba(192,57,43,0.1);color:#3a2520}
+    .rec-moderate .rec-header{background:rgba(201,106,26,0.1);color:#c96a1a;border:1px solid rgba(201,106,26,0.2)}
+    .rec-moderate .rec-item{border-left-color:#c96a1a;border-right:1px solid rgba(201,106,26,0.15);border-bottom:1px solid rgba(201,106,26,0.1);color:#3a2520}
+    .rec-low .rec-header{background:rgba(160,124,16,0.1);color:#a07c10;border:1px solid rgba(160,124,16,0.2)}
+    .rec-low .rec-item{border-left-color:#a07c10;border-right:1px solid rgba(160,124,16,0.15);border-bottom:1px solid rgba(160,124,16,0.1);color:#3a2520}
+    .rec-served .rec-header{background:rgba(46,125,79,0.1);color:#2e7d4f;border:1px solid rgba(46,125,79,0.2)}
+    .rec-served .rec-item{border-left-color:#2e7d4f;border-right:1px solid rgba(46,125,79,0.15);border-bottom:1px solid rgba(46,125,79,0.1);color:#3a2520}
     @keyframes spin{to{transform:rotate(360deg)}}
     .spin{width:13px;height:13px;border:2px solid rgba(248,244,236,0.3);border-top-color:#f8f4ec;border-radius:50%;animation:spin 0.65s linear infinite;flex-shrink:0}
     .spin-dark{width:13px;height:13px;border:2px solid rgba(124,111,90,0.2);border-top-color:#7c6f5a;border-radius:50%;animation:spin 0.65s linear infinite;flex-shrink:0}
@@ -219,6 +233,7 @@
         </div>
       </div>
     </div>
+    <div id="recPanel"></div>
 
     <!-- TAB: NEAREST -->
     <div class="tab-panel" id="panel-nearest">
@@ -337,18 +352,90 @@
   }
 
   // ── ANALYZE ──────────────────────────────────────────────────────────────
+  // Tier config lookup
+  const TIER_CFG = {
+    critical: {icon:'🚨',label:'Critical Risk',color:'#c0392b',cls:'rec-critical'},
+    moderate: {icon:'⚠️',label:'Moderate Risk',color:'#c96a1a',cls:'rec-moderate'},
+    low:      {icon:'💡',label:'Low Risk',      color:'#a07c10',cls:'rec-low'},
+    served:   {icon:'✅',label:'Well Served',   color:'#2e7d4f',cls:'rec-served'},
+  };
+
   function renderZones(zones){
+    // Aggregate recs by tier for sidebar panel
+    const tierBuckets = {critical:[],moderate:[],low:[],served:[]};
+
     zones.forEach(z=>{
-      const c=getColor(z.priority_score);
-      const poly=L.polygon(hexPoly(z.lat,z.lon,0.012),{color:c,weight:1,fillColor:c,fillOpacity:0.38}).addTo(hexLayer);
+      const c    = getColor(z.priority_score);
+      const tier = z.rec_tier || 'served';
+      const cfg  = TIER_CFG[tier] || TIER_CFG.served;
+      const poly = L.polygon(hexPoly(z.lat,z.lon,0.012),{color:c,weight:1,fillColor:c,fillOpacity:0.38}).addTo(hexLayer);
+
+      // Popup
+      const recItems = z.rec_items || [];
+      const recHTML  = recItems.length ? `
+        <div style="margin-top:10px;padding:8px 10px;background:rgba(0,0,0,0.04);border-left:3px solid ${cfg.color};border-radius:0 7px 7px 0;">
+          <div style="font-size:10px;font-weight:600;color:${cfg.color};margin-bottom:5px;letter-spacing:0.04em">${cfg.icon} RECOMMENDATIONS</div>
+          ${recItems.map(r=>`<div style="font-size:11px;color:#3a3530;line-height:1.5;margin-bottom:3px">• ${r}</div>`).join('')}
+        </div>` : '';
+
       poly.bindPopup(`
         <div class="pop-score">${Math.round(z.priority_score*100)}<small> / 100</small></div>
         <div class="pop-row"><span>Priority score</span><b>${z.priority_score}</b></div>
         <div class="pop-row"><span>Facilities nearby</span><b>${z.access_count}</b></div>
         <div class="pop-row"><span>Risk level</span><b>${getTag(z.priority_score)}</b></div>
-      `);
+        ${recHTML}
+      `, {maxWidth:310});
       poly.on('mouseover',()=>poly.setStyle({fillOpacity:.62,weight:2}));
-      poly.on('mouseout',()=>poly.setStyle({fillOpacity:.38,weight:1}));
+      poly.on('mouseout', ()=>poly.setStyle({fillOpacity:.38,weight:1}));
+      poly.on('click', ()=>showRecSidebar(tier, z.rec_items||[]));
+
+      // Collect recs into buckets
+      if(recItems.length && tierBuckets[tier]) tierBuckets[tier].push(...recItems);
+    });
+
+    // Build sidebar rec panel — show all unique recs grouped by tier
+    buildRecPanel(tierBuckets);
+  }
+
+  function showRecSidebar(tier, items){
+    // Highlight a single zone's recs in the sidebar
+    if(!items.length) return;
+    const cfg = TIER_CFG[tier] || TIER_CFG.served;
+    const panel = document.getElementById('recPanel');
+    panel.style.display = 'flex';
+    panel.innerHTML = `
+      <div style="padding:0 0 8px 0;font-size:10.5px;font-weight:500;color:var(--sub);text-transform:uppercase;letter-spacing:0.08em">
+        Zone Recommendations
+      </div>
+      <div class="${cfg.cls}">
+        <div class="rec-header">${cfg.icon} ${cfg.label}</div>
+        ${items.map(r=>`<div class="rec-item">${r}</div>`).join('')}
+      </div>`;
+    // Scroll sidebar into view
+    panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  function buildRecPanel(buckets){
+    const panel = document.getElementById('recPanel');
+    const ORDER = ['critical','moderate','low','served'];
+    const hasAny = ORDER.some(t => buckets[t].length > 0);
+    if(!hasAny){ panel.style.display='none'; panel.innerHTML=''; return; }
+
+    panel.style.display = 'flex';
+    panel.innerHTML = `<div style="padding:0 0 8px 0;font-size:10.5px;font-weight:500;color:var(--sub);text-transform:uppercase;letter-spacing:0.08em">Recommendations by Zone</div>`;
+
+    ORDER.forEach(tier=>{
+      const rawItems = buckets[tier];
+      if(!rawItems.length) return;
+      const unique = [...new Set(rawItems)].slice(0,5); // top 5 unique
+      const cfg = TIER_CFG[tier];
+      const block = document.createElement('div');
+      block.className = cfg.cls;
+      block.style.marginBottom = '10px';
+      block.innerHTML = `
+        <div class="rec-header">${cfg.icon} ${cfg.label}</div>
+        ${unique.map(r=>`<div class="rec-item">${r}</div>`).join('')}`;
+      panel.appendChild(block);
     });
   }
 
@@ -363,6 +450,7 @@
     hexLayer.clearLayers();
     document.getElementById('numF').textContent='—';
     document.getElementById('numZ').textContent='—';
+    const rp=document.getElementById('recPanel');rp.style.display='none';rp.innerHTML='';
     try{
       const res=await fetch(`${API_BASE}/analyze?city=${encodeURIComponent(city)}&resource=${encodeURIComponent(resource)}`);
       if(!res.ok)throw new Error(`Server returned ${res.status}`);
