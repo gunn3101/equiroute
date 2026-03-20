@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EquiRoute — Feedback</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --text:         #2a2520;
+      --sub:          #7a746a;
+      --accent:       #7c6f5a;
+      --accent-dark:  #5c5244;
+      --accent-glow:  rgba(124,111,90,0.22);
+      --glass-bg:     rgba(220,215,205,0.38);
+      --glass-border: rgba(200,192,175,0.55);
+      --glass-input:  rgba(245,243,238,0.45);
+      --green:        #2e7d4f;
+      --red:          #c0392b;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; overflow:hidden; font-family:'Sora',sans-serif; color:var(--text); }
+
+    /* ── MAP BG ── */
+    #map {
+      position:absolute; inset:0; z-index:0;
+      background: linear-gradient(135deg, #c8c0b0 0%, #d8d2c4 40%, #c4beb2 100%);
+    }
+    /* Animated soft blobs for depth */
+    #map::before {
+      content:''; position:absolute; inset:0;
+      background:
+        radial-gradient(ellipse 60% 45% at 30% 40%, rgba(180,168,148,0.45) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 60% at 72% 65%, rgba(160,152,136,0.3) 0%, transparent 65%),
+        radial-gradient(ellipse 80% 40% at 50% 85%, rgba(200,192,175,0.35) 0%, transparent 70%);
+      animation: blobDrift 18s ease-in-out infinite alternate;
+    }
+    @keyframes blobDrift {
+      0%   { transform: scale(1) translate(0,0); }
+      50%  { transform: scale(1.04) translate(-10px,6px); }
+      100% { transform: scale(0.97) translate(8px,-8px); }
+    }
+    #vignette {
+      position:absolute; inset:0; z-index:1; pointer-events:none;
+      background: radial-gradient(ellipse at center,
+        rgba(235,228,214,0.08) 0%, rgba(200,196,188,0.38) 60%, rgba(165,160,152,0.55) 100%);
+    }
+
+    /* ── CORNER LOGO ── */
+    #corner {
+      position:absolute; top:22px; left:22px; z-index:20;
+      display:flex; align-items:center; gap:9px;
+      background:var(--glass-bg); backdrop-filter:blur(18px) saturate(150%);
+      border:1px solid var(--glass-border); border-radius:10px;
+      padding:10px 14px; text-decoration:none;
+      box-shadow:0 4px 16px rgba(60,50,30,0.1), inset 0 1px 0 rgba(255,255,255,0.55);
+      transition: box-shadow 0.2s, background 0.2s;
+    }
+    #corner:hover { background:rgba(235,230,218,0.55); box-shadow:0 6px 22px rgba(60,50,30,0.15); }
+    .corner-icon {
+      width:26px; height:26px; background:linear-gradient(135deg,#7c6f5a,#a0906e);
+      border-radius:7px; display:grid; place-items:center;
+      box-shadow:0 2px 8px rgba(80,60,30,0.3); flex-shrink:0;
+    }
+    .corner-text { font-size:13px; font-weight:600; color:var(--text); }
+
+    /* ── PAGE CENTER ── */
+    #page {
+      position:absolute; inset:0; z-index:10;
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+
+    /* ── GLASS CARD ── */
+    .card {
+      width:100%; max-width:520px;
+      background:var(--glass-bg); backdrop-filter:blur(28px) saturate(160%);
+      border:1px solid var(--glass-border); border-radius:20px;
+      padding:36px 36px 32px;
+      box-shadow: 0 12px 48px rgba(60,50,30,0.18), inset 0 1px 0 rgba(255,255,255,0.6);
+      opacity:0; transform:translateY(18px);
+      animation:fadeUp 0.65s ease 0.15s forwards;
+    }
+    @keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
+
+    /* ── HEADER ── */
+    .card-eyebrow {
+      font-size:10.5px; font-weight:500; letter-spacing:0.18em; text-transform:uppercase;
+      color:var(--sub); margin-bottom:6px; display:flex; align-items:center; gap:8px;
+    }
+    .card-eyebrow::before { content:''; width:20px; height:1px; background:var(--accent); display:block; }
+    .card-title { font-size:26px; font-weight:700; letter-spacing:-0.02em; line-height:1.2; }
+    .card-desc  { margin-top:8px; font-size:13px; font-weight:300; color:var(--sub); line-height:1.6; }
+
+    /* ── FORM ELEMENTS ── */
+    .form { display:flex; flex-direction:column; gap:16px; margin-top:28px; }
+    .row-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+    .field label {
+      display:block; font-size:10.5px; font-weight:500; color:var(--sub);
+      text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;
+    }
+    .field input, .field select, .field textarea {
+      width:100%; padding:10px 13px; font-family:'Sora',sans-serif;
+      font-size:13px; color:var(--text); background:var(--glass-input);
+      border:1px solid rgba(180,168,148,0.5); border-radius:9px; outline:none;
+      appearance:none; resize:none; transition:border-color 0.15s, box-shadow 0.15s;
+      box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .field input::placeholder, .field textarea::placeholder { color:rgba(122,116,106,0.5); }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color:var(--accent);
+      background:rgba(248,246,242,0.75);
+      box-shadow:0 0 0 3px var(--accent-glow), inset 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .field select option { background:#dddad2; color:var(--text); }
+    .sel-wrap { position:relative; }
+    .sel-wrap::after {
+      content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%);
+      border-left:4px solid transparent; border-right:4px solid transparent;
+      border-top:5px solid var(--sub); pointer-events:none;
+    }
+
+    /* field error state */
+    .field input.err, .field select.err, .field textarea.err {
+      border-color: var(--red);
+      box-shadow: 0 0 0 3px rgba(192,57,43,0.12);
+      animation: shake 0.35s ease;
+    }
+
+    /* ── STAR RATING ── */
+    .stars-wrap { display:flex; gap:6px; margin-top:2px; }
+    .star {
+      font-size:28px; cursor:pointer; color:rgba(180,168,148,0.45);
+      transition:color 0.12s, transform 0.12s; line-height:1; user-select:none;
+    }
+    .star:hover { transform:scale(1.18); }
+    .star.lit { color:#c96a1a; }
+    #starsWrap.err .star { animation:shake 0.35s ease; }
+
+    /* ── CHAR COUNTER ── */
+    .char-count { font-size:10.5px; color:var(--sub); text-align:right; margin-top:4px; }
+    .char-count.warn { color:var(--red); }
+
+    /* ── ERROR BANNER ── */
+    #errorBanner {
+      display:none; padding:10px 13px; border-radius:9px; font-size:12px; line-height:1.5;
+      background:rgba(192,57,43,0.08); border:1px solid rgba(192,57,43,0.3); color:var(--red);
+    }
+
+    /* ── SUBMIT ── */
+    hr.div { border:none; border-top:1px solid rgba(180,168,148,0.35); }
+    .submit-btn {
+      width:100%; padding:12px; background:linear-gradient(135deg,#7c6f5a,#9c8a6e);
+      color:#f8f4ec; border:none; border-radius:9px; font-family:'Sora',sans-serif;
+      font-size:13px; font-weight:500; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px;
+      transition:opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      box-shadow:0 3px 12px rgba(80,60,30,0.28), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+    .submit-btn:hover:not(:disabled) { opacity:0.88; box-shadow:0 5px 18px rgba(80,60,30,0.38); }
+    .submit-btn:active:not(:disabled) { transform:scale(0.98); }
+    .submit-btn:disabled { opacity:0.45; cursor:not-allowed; }
+
+    /* ── SUCCESS ── */
+    .success-state {
+      display:none; flex-direction:column; align-items:center; text-align:center;
+      padding:24px 0 12px; gap:14px;
+    }
+    .success-icon {
+      width:58px; height:58px; background:rgba(46,125,79,0.1);
+      border:1px solid rgba(46,125,79,0.3); border-radius:50%;
+      display:grid; place-items:center;
+      animation:popIn 0.45s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+    }
+    @keyframes popIn { from{transform:scale(0.5);opacity:0} to{transform:scale(1);opacity:1} }
+    .success-title { font-size:21px; font-weight:600; letter-spacing:-0.01em; }
+    .success-sub   { font-size:13px; font-weight:300; color:var(--sub); line-height:1.6; max-width:320px; }
+    .back-btn {
+      padding:9px 22px; background:transparent; border:1px solid rgba(180,168,148,0.5);
+      border-radius:9px; font-family:'Sora',sans-serif; font-size:12px; font-weight:500;
+      color:var(--sub); cursor:pointer; transition:background 0.15s, border-color 0.15s;
+    }
+    .back-btn:hover { background:rgba(245,243,238,0.55); border-color:var(--accent); color:var(--accent-dark); }
+    .home-btn {
+      display:inline-flex; align-items:center; gap:6px; padding:9px 20px;
+      background:linear-gradient(135deg,#7c6f5a,#9c8a6e); border:none; border-radius:9px;
+      font-family:'Sora',sans-serif; font-size:12px; font-weight:500;
+      color:#f8f4ec; text-decoration:none; cursor:pointer;
+      transition:opacity 0.15s, transform 0.1s;
+      box-shadow:0 3px 12px rgba(80,60,30,0.28), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+    .home-btn:hover { opacity:0.88; }
+    .home-btn:active { transform:scale(0.98); }
+
+    /* ── MISC ── */
+    ::-webkit-scrollbar { width:3px; }
+    ::-webkit-scrollbar-thumb { background:rgba(180,168,148,0.4); border-radius:3px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spin {
+      width:13px; height:13px; border:2px solid rgba(248,244,236,0.3);
+      border-top-color:#f8f4ec; border-radius:50%; animation:spin 0.65s linear infinite; flex-shrink:0;
+    }
+    @keyframes shake {
+      0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px)}
+      40%{transform:translateX(5px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)}
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"><div id="vignette"></div></div>
+
+<a id="corner" href="index.html">
+  <div class="corner-icon">
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <circle cx="7.5" cy="7.5" r="5.5" stroke="#f8f4ec" stroke-width="1.5"/>
+      <path d="M7.5 4.5v3l2.2 1.6" stroke="#f8f4ec" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <span class="corner-text">EquiRoute</span>
+</a>
+
+<div id="page">
+  <div class="card">
+
+    <!-- FORM VIEW -->
+    <div id="formView">
+      <div class="card-eyebrow">Team Spectre</div>
+      <div class="card-title">Share your feedback</div>
+      <div class="card-desc">Help us improve EquiRoute. Your thoughts matter — takes less than a minute.</div>
+
+      <div class="form">
+        <div class="row-2">
+          <div class="field">
+            <label>Name <span style="color:var(--red)">*</span></label>
+            <input id="inp-name" type="text" placeholder="Your name" maxlength="80" />
+          </div>
+          <div class="field">
+            <label>Role</label>
+            <div class="sel-wrap">
+              <select id="inp-role">
+                <option value="">Select role</option>
+                <option>Student</option>
+                <option>Researcher</option>
+                <option>Urban Planner</option>
+                <option>NGO / Govt</option>
+                <option>Developer</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Overall Experience <span style="color:var(--red)">*</span></label>
+          <div class="stars-wrap" id="starsWrap">
+            <span class="star" data-v="1">★</span>
+            <span class="star" data-v="2">★</span>
+            <span class="star" data-v="3">★</span>
+            <span class="star" data-v="4">★</span>
+            <span class="star" data-v="5">★</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>What did you use it for?</label>
+          <div class="sel-wrap">
+            <select id="inp-use">
+              <option value="">Select use case</option>
+              <option>Medical Access Analysis</option>
+              <option>Education Gap Mapping</option>
+              <option>Evacuation Planning</option>
+              <option>Research / Academic</option>
+              <option>Just Exploring</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Your Feedback <span style="color:var(--red)">*</span></label>
+          <textarea id="inp-msg" rows="4" placeholder="Tell us what you liked, what can be improved, or any feature requests…" maxlength="1000"></textarea>
+          <div class="char-count" id="charCount">0 / 1000</div>
+        </div>
+
+        <div id="errorBanner"></div>
+
+        <hr class="div" />
+
+        <button class="submit-btn" id="submitBtn" onclick="handleSubmit()">
+          <span id="btnContent">Submit Feedback</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- SUCCESS VIEW -->
+    <div class="success-state" id="successView">
+      <div class="success-icon">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <path d="M6 13.5l5 5 9-9" stroke="#2e7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="success-title">Thank you!</div>
+      <div class="success-sub" id="successSub">Your feedback has been recorded. Team Spectre appreciates every response.</div>
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+        <button class="back-btn" onclick="resetForm()">Submit another</button>
+        <a class="home-btn" href="intro.html">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 6l5-5 5 5M2.5 4.5V10h2.5V7.5h2V10h2.5V4.5" stroke="#f8f4ec" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Back to Dashboard
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── STAR RATING ───────────────────────────────────────────────────────────
+  let rating = 0;
+  const stars = document.querySelectorAll('.star');
+  stars.forEach(s => {
+    s.addEventListener('mouseenter', () => {
+      const v = +s.dataset.v;
+      stars.forEach(x => x.classList.toggle('lit', +x.dataset.v <= v));
+    });
+    s.addEventListener('mouseleave', () => {
+      stars.forEach(x => x.classList.toggle('lit', +x.dataset.v <= rating));
+    });
+    s.addEventListener('click', () => {
+      rating = +s.dataset.v;
+      stars.forEach(x => x.classList.toggle('lit', +x.dataset.v <= rating));
+    });
+  });
+
+  // ── CHAR COUNTER ──────────────────────────────────────────────────────────
+  const textarea = document.getElementById('inp-msg');
+  const charCount = document.getElementById('charCount');
+  textarea.addEventListener('input', () => {
+    const n = textarea.value.length;
+    charCount.textContent = `${n} / 1000`;
+    charCount.classList.toggle('warn', n > 900);
+  });
+
+  // ── VALIDATION ────────────────────────────────────────────────────────────
+  function setErr(id, msg) {
+    const el = document.getElementById(id);
+    el.classList.remove('err'); void el.offsetWidth; el.classList.add('err');
+    showBanner(msg);
+    setTimeout(() => el.classList.remove('err'), 1500);
+  }
+  function showBanner(msg) {
+    const b = document.getElementById('errorBanner');
+    b.textContent = msg; b.style.display = 'block';
+  }
+  function clearBanner() { document.getElementById('errorBanner').style.display = 'none'; }
+
+  // ── SUBMIT ────────────────────────────────────────────────────────────────
+  async function handleSubmit() {
+    clearBanner();
+    const name = document.getElementById('inp-name').value.trim();
+    const role = document.getElementById('inp-role').value;
+    const use  = document.getElementById('inp-use').value;
+    const msg  = document.getElementById('inp-msg').value.trim();
+
+    if (!name) { setErr('inp-name', 'Please enter your name.'); return; }
+    if (!rating) {
+      const w = document.getElementById('starsWrap');
+      w.classList.remove('err'); void w.offsetWidth; w.classList.add('err');
+      showBanner('Please give a star rating.'); return;
+    }
+    if (!msg) { setErr('inp-msg', 'Please write your feedback before submitting.'); return; }
+
+    const btn  = document.getElementById('submitBtn');
+    const btnC = document.getElementById('btnContent');
+    btn.disabled = true;
+    btnC.innerHTML = '<span class="spin"></span> Submitting…';
+
+    try {
+      const res = await fetch('/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, role, use, rating, message: msg }),
+      });
+      const data = await res.json();
+
+      if (!data.ok) throw new Error(data.error || 'Server returned an error.');
+
+      // Success
+      document.getElementById('successSub').textContent =
+        `Your feedback has been saved (response #${data.count}). Team Spectre appreciates every response.`;
+      document.getElementById('formView').style.display = 'none';
+      const sv = document.getElementById('successView');
+      sv.style.display = 'flex';
+
+    } catch (err) {
+      showBanner(`Submission failed: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btnC.textContent = 'Submit Feedback';
+    }
+  }
+
+  // ── RESET ─────────────────────────────────────────────────────────────────
+  function resetForm() {
+    rating = 0;
+    stars.forEach(s => s.classList.remove('lit'));
+    document.getElementById('inp-name').value = '';
+    document.getElementById('inp-role').selectedIndex = 0;
+    document.getElementById('inp-use').selectedIndex  = 0;
+    document.getElementById('inp-msg').value = '';
+    charCount.textContent = '0 / 1000';
+    charCount.classList.remove('warn');
+    clearBanner();
+    document.getElementById('formView').style.display  = 'block';
+    document.getElementById('successView').style.display = 'none';
+  }
+</script>
+
+</body>
+</html>
